@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mi Calendario</title>
+  <meta name="color-scheme" content="light" />
+  <style>
+    :root{
+      --primary:#2E86DE;           /* ← Cambia color principal */
+      --bg:#ffffff;
+      --text:#1c1c1c;
+      --muted:#6b7280;
+      --card:#f3f4f6;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu; background:var(--bg);color:var(--text)}
+    header{display:flex;gap:12px;align-items:center;padding:14px 16px;border-bottom:1px solid #e5e7eb}
+    header img{width:36px;height:36px;border-radius:8px;object-fit:cover}
+    header h1{font-size:18px;margin:0;font-weight:700}
+    main{max-width:960px;margin:0 auto;padding:16px;display:grid;grid-template-columns:1fr;gap:16px}
+    @media(min-width:900px){main{grid-template-columns:1.2fr .8fr}}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    label{font-size:12px;color:var(--muted)}
+    input,select,textarea{width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:8px}
+    button{padding:10px 14px;border-radius:8px;border:1px solid transparent;background:var(--primary);color:#fff;font-weight:700;cursor:pointer}
+    button.secondary{background:#fff;color:#111;border-color:#e5e7eb}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+    .day{background:var(--card);border-radius:10px;padding:10px;min-height:88px}
+    .day .d{font-size:12px;color:var(--muted)}
+    .event{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:6px;margin-top:6px;font-size:12px}
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:6px 8px;border-radius:999px;border:1px solid #e5e7eb;background:#fff;font-size:12px;color:var(--muted)}
+    .hint{font-size:12px;color:var(--muted)}
+    .footer{padding:16px;text-align:center;color:var(--muted);font-size:12px}
+    .chip{display:inline-block;background:#eef2ff;border:1px solid #e5e7eb;color:#3730a3;border-radius:999px;padding:4px 8px;font-size:11px;margin:2px}
+  </style>
+  <!-- Google Identity Services (OAuth 2.0 para web) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <header>
+    <!-- Cambia el logo aquí -->
+    <img id="logo" src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f4c5.svg" alt="logo">
+    <h1 id="appName">Mi Calendario</h1>
+    <span class="badge" id="brandHint">Branding editable en el archivo</span>
+    <div style="margin-left:auto" class="row">
+      <button id="btnSignIn">Entrar con Google</button>
+      <button id="btnSignOut" class="secondary" style="display:none">Salir</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Calendario + eventos -->
+    <section class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div class="row">
+          <button id="prevMonth" class="secondary">◀</button>
+          <button id="todayBtn" class="secondary">Hoy</button>
+          <button id="nextMonth" class="secondary">▶</button>
+        </div>
+        <div>
+          <strong id="monthTitle">Mes Año</strong>
+        </div>
+        <div>
+          <button id="refreshBtn" class="secondary">Refrescar</button>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:6px">Selecciona un día para crear una cita rápida.</div>
+      <div id="calendar" class="calendar-grid" style="margin-top:12px"></div>
+    </section>
+
+    <!-- Crear cita + WhatsApp + Contactos -->
+    <section class="card">
+      <h3 style="margin-top:0">Nueva cita</h3>
+      <div class="row">
+        <div style="flex:1">
+          <label>Título</label>
+          <input id="title" placeholder="Ej: Reunión con cliente" />
+        </div>
+      </div>
+      <div class="row">
+        <div style="flex:1">
+          <label>Fecha (YYYY-MM-DD)</label>
+          <input id="date" />
+        </div>
+        <div style="width:120px">
+          <label>Inicio (HH:mm)</label>
+          <input id="start" value="10:00" />
+        </div>
+        <div style="width:120px">
+          <label>Fin (HH:mm)</label>
+          <input id="end" value="11:00" />
+        </div>
+      </div>
+      <div class="row">
+        <div style="flex:1">
+          <label>Lugar (opcional)</label>
+          <input id="location" placeholder="Oficina, Zoom, etc." />
+        </div>
+      </div>
+      <div class="row">
+        <div style="flex:1">
+          <label>Teléfono destino (formato internacional sin +, opcional)</label>
+          <input id="phone" placeholder="5491122334455" />
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="createAndShare">Crear en Google Calendar + Abrir WhatsApp</button>
+        <button id="pickContact" class="secondary">Elegir contacto del teléfono</button>
+      </div>
+      <div id="contactsArea" class="hint" style="margin-top:8px">
+        <div>Soporte de <b>Contact Picker API</b>: <span id="cpSupport"></span></div>
+        <div id="pickedContacts"></div>
+        <div style="margin-top:6px">Si tu navegador no soporta selección de contactos, pega números separados por coma:</div>
+        <textarea id="manualPhones" rows="2" placeholder="5491112345678, 573001234567"></textarea>
+      </div>
+    </section>
+
+    <!-- Lista de eventos del mes -->
+    <section class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h3 style="margin:0">Eventos del mes</h3>
+        <span class="hint" id="tzLabel"></span>
+      </div>
+      <div id="eventsList" style="margin-top:8px"></div>
+    </section>
+  </main>
+
+  <div class="footer">
+    Hecho para GitHub Pages • Recuerda configurar tu <code>OAuth Client ID</code>.  
+  </div>
+
+  <script>
+  // ========= BRANDING (edítalo aquí mismo) =========
+  const BRAND = {
+    name: "Mi Calendario",
+    primary: "#2E86DE",
+    logoUrl: "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f4c5.svg", // cambia por tu logo
+  };
+  document.documentElement.style.setProperty('--primary', BRAND.primary);
+  document.getElementById('appName').textContent = BRAND.name;
+  document.getElementById('logo').src = BRAND.logoUrl;
+
+  // ========= GOOGLE OAUTH (GIS) =========
+  const CLIENT_ID = "YOUR_GOOGLE_OAUTH_CLIENT_ID"; // <-- PON TU CLIENT ID AQUI
+  const SCOPES = "https://www.googleapis.com/auth/calendar";
+  const CAL_BASE = "https://www.googleapis.com/calendar/v3";
+  let accessToken = null;
+
+  let tokenClient = null;
+  window.onload = function(){
+    if (window.google && google.accounts && google.accounts.oauth2) {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        prompt: 'consent',
+        callback: (resp) => {
+          if (resp && resp.access_token) {
+            accessToken = resp.access_token;
+            toggleAuthUI(true);
+            loadMonth();
+          }
+        },
+      });
+    }
+    initUI();
+  };
+
+  function signIn(){
+    if (!tokenClient) return alert("Google Identity aún no cargó.");
+    tokenClient.requestAccessToken();
+  }
+  function signOut(){
+    accessToken = null;
+    toggleAuthUI(false);
+    document.getElementById('eventsList').innerHTML = "";
+  }
+  function toggleAuthUI(isLogged){
+    document.getElementById('btnSignIn').style.display = isLogged ? "none" : "";
+    document.getElementById('btnSignOut').style.display = isLogged ? "" : "none";
+  }
+
+  async function gcalGET(path, params={}){
+    if(!accessToken) throw new Error("No autenticado");
+    const url = new URL(CAL_BASE + path);
+    Object.entries(params).forEach(([k,v]) => url.searchParams.set(k,v));
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: "Bearer " + accessToken }
+    });
+    if(!res.ok) throw new Error("Error API: "+res.status);
+    return res.json();
+  }
+
+  async function gcalPOST(path, body){
+    if(!accessToken) throw new Error("No autenticado");
+    const res = await fetch(CAL_BASE + path, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + accessToken,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+    if(!res.ok){
+      const t = await res.text();
+      throw new Error("Error API: "+res.status+" "+t);
+    }
+    return res.json();
+  }
+
+  // ========= CALENDARIO (UI mínima) =========
+  let current = new Date(); // mes actual
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  document.getElementById("tzLabel").textContent = "Zona horaria: " + tz;
+
+  function ymd(d){ return d.toISOString().slice(0,10); }
+  function firstOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
+  function lastOfMonth(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0); }
+
+  function renderCalendar(){
+    const cal = document.getElementById("calendar");
+    cal.innerHTML = "";
+    const monthTitle = document.getElementById("monthTitle");
+    monthTitle.textContent = current.toLocaleString('es-ES', { month:'long', year:'numeric' });
+
+    // Crear celdas del mes (simple, sin offsets)
+    const start = firstOfMonth(current);
+    const end = lastOfMonth(current);
+    for(let day=1; day<=end.getDate(); day++){
+      const date = new Date(current.getFullYear(), current.getMonth(), day);
+      const cell = document.createElement('div');
+      cell.className = 'day';
+      const dEl = document.createElement('div');
+      dEl.className = 'd';
+      dEl.textContent = date.toLocaleDateString('es-ES',{weekday:'short'}) + " " + day;
+      cell.appendChild(dEl);
+      cell.onclick = ()=>{
+        document.getElementById('date').value = ymd(date);
+        window.scrollTo({ top: document.body.scrollHeight, behavior:'smooth' });
+      };
+      cal.appendChild(cell);
+    }
+  }
+
+  async function loadEventsOfCurrentMonth(){
+    if(!accessToken) return;
+    const startISO = new Date(current.getFullYear(), current.getMonth(), 1, 0,0,0).toISOString();
+    const endISO   = new Date(current.getFullYear(), current.getMonth()+1, 0, 23,59,59).toISOString();
+    const data = await gcalGET("/calendars/primary/events", {
+      timeMin: startISO,
+      timeMax: endISO,
+      singleEvents: "true",
+      orderBy: "startTime"
+    });
+    const list = document.getElementById("eventsList");
+    list.innerHTML = "";
+    (data.items || []).forEach(ev=>{
+      const s = ev.start?.dateTime || ev.start?.date;
+      const e = ev.end?.dateTime || ev.end?.date;
+      const div = document.createElement('div');
+      div.className = "event";
+      const startLocal = s ? new Date(s).toLocaleString() : "—";
+      const endLocal   = e ? new Date(e).toLocaleString() : "—";
+      div.innerHTML = `<strong>${ev.summary || "(Sin título)"}</strong><br>
+        ${startLocal} - ${endLocal}
+        ${ev.location ? `<br>📍 ${ev.location}` : ""}
+        ${ev.htmlLink ? `<br><a href="${ev.htmlLink}" target="_blank">Ver en Google Calendar</a>` : ""}`;
+      list.appendChild(div);
+    });
+  }
+
+  function loadMonth(){
+    renderCalendar();
+    if(accessToken) loadEventsOfCurrentMonth().catch(console.error);
+  }
+
+  document.getElementById("prevMonth").onclick = ()=>{ current.setMonth(current.getMonth()-1); loadMonth(); };
+  document.getElementById("nextMonth").onclick = ()=>{ current.setMonth(current.getMonth()+1); loadMonth(); };
+  document.getElementById("todayBtn").onclick  = ()=>{ current = new Date(); loadMonth(); };
+  document.getElementById("refreshBtn").onclick= ()=> loadMonth();
+
+  // ========= CREAR EVENTO + WHATSAPP =========
+  document.getElementById("createAndShare").onclick = async ()=>{
+    try{
+      if(!accessToken) return alert("Primero entra con Google.");
+      const title = (document.getElementById("title")).value.trim();
+      const date  = (document.getElementById("date")).value.trim();
+      const start = (document.getElementById("start")).value.trim();
+      const end   = (document.getElementById("end")).value.trim();
+      const loc   = (document.getElementById("location")).value.trim();
+      const phone = (document.getElementById("phone")).value.trim();
+
+      if(!title || !date || !start || !end) return alert("Completa título, fecha, inicio y fin.");
+
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const startISO = new Date(`${date}T${start}:00`);
+      const endISO   = new Date(`${date}T${end}:00`);
+
+      const created = await gcalPOST("/calendars/primary/events", {
+        summary: title,
+        location: loc || undefined,
+        start: { dateTime: startISO.toISOString(), timeZone: tz },
+        end:   { dateTime: endISO.toISOString(),   timeZone: tz }
+      });
+
+      // Construir texto y abrir WhatsApp
+      const txt = `📅 *${title}*
+🕒 ${date} ${start} - ${end}
+📍 ${loc || "—"}
+🔗 ${created.htmlLink || ""}`;
+      const encoded = encodeURIComponent(txt);
+      const url = phone ? `https://wa.me/${phone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+      window.open(url, '_blank');
+
+      alert("Evento creado en Google Calendar. Se abrió WhatsApp.");
+      loadEventsOfCurrentMonth().catch(console.error);
+    }catch(err){
+      console.error(err);
+      alert("No se pudo crear el evento. Revisa la consola.");
+    }
+  };
+
+  // ========= CONTACT PICKER API (progresivo) =========
+  const cpSupported = ('contacts' in navigator) && ('select' in navigator.contacts);
+  document.getElementById("cpSupport").textContent = cpSupported ? "Disponible ✅" : "No disponible ❌";
+  document.getElementById("pickContact").onclick = async ()=>{
+    if(!cpSupported){
+      return alert("Tu navegador no soporta el selector de contactos. Usa el cuadro de números manual.");
+    }
+    try{
+      const props = ['name','tel'];
+      const opts = { multiple: false };
+      const contacts = await navigator.contacts.select(props, opts);
+      if(contacts && contacts.length){
+        const c = contacts[0];
+        const nums = (c.tel || []).map(t=>t.replace(/[^\d]/g,''));
+        const dest = document.getElementById("pickedContacts");
+        dest.innerHTML = `<div>Seleccionado: <span class="chip">${(c.name && c.name[0]) || "Contacto"}</span> ${nums.map(n=>`<span class="chip">${n}</span>`).join(' ')}</div>`;
+        if(nums[0]) document.getElementById("phone").value = nums[0];
+      }
+    }catch(e){
+      console.warn(e);
+      alert("No se pudo leer contactos (permiso denegado o cancelado).");
+    }
+  };
+
+  // ========= BOTONES AUTH =========
+  document.getElementById("btnSignIn").onclick = signIn;
+  document.getElementById("btnSignOut").onclick = signOut;
+
+  // ========= INICIAL =========
+  (function initFirst(){
+    // Prellenar fecha de hoy
+    const t = new Date();
+    const yyyy = t.getFullYear();
+    const mm = String(t.getMonth()+1).padStart(2,'0');
+    const dd = String(t.getDate()).padStart(2,'0');
+    document.getElementById("date").value = `${yyyy}-${mm}-${dd}`;
+    loadMonth();
+  })();
+  </script>
+</body>
+</html>
